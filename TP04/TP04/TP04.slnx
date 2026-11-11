@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="TP04.Api/TP04.Api.csproj" />
+  <Project Path="TP04.Biblioteca/TP04.Biblioteca.csproj" />
+  <Project Path="TP04.Tests/TP04.Tests.csproj" />
+</Solution>

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gerenciamento de Produtos</title>
+</head>
+<body>
+    <h1>Gerenciamento de Produtos</h1>
+
+    <h2 id="titulo-form">Novo produto</h2>
+    <form id="form">
+        <input type="hidden" id="id">
+        <p>
+            <label for="nome">Nome</label><br>
+            <input type="text" id="nome" maxlength="100" required>
+        </p>
+        <p>
+            <label for="descricao">Descrição</label><br>
+            <textarea id="descricao" maxlength="500" rows="3" cols="30"></textarea>
+        </p>
+        <p>
+            <label for="preco">Preço</label><br>
+            <input type="number" id="preco" step="0.01" min="0.01" required>
+        </p>
+        <p>
+            <label for="quantidade">Quantidade em estoque</label><br>
+            <input type="number" id="quantidade" step="1" min="0" required>
+        </p>
+        <button type="submit" id="salvar">Salvar</button>
+        <button type="button" id="cancelar" hidden>Cancelar</button>
+    </form>
+
+    <p id="mensagem" role="status"></p>
+
+    <h2>Produtos cadastrados</h2>
+    <table border="1" cellpadding="4">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Nome</th>
+                <th>Descrição</th>
+                <th>Preço</th>
+                <th>Quantidade</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody id="corpo"></tbody>
+    </table>
+
+    <script>
+        const url = "/api/produtos";
+        const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+        const form = document.getElementById("form");
+        const campos = {
+            id: document.getElementById("id"),
+            nome: document.getElementById("nome"),
+            descricao: document.getElementById("descricao"),
+            preco: document.getElementById("preco"),
+            quantidade: document.getElementById("quantidade")
+        };
+        const titulo = document.getElementById("titulo-form");
+        const cancelar = document.getElementById("cancelar");
+        const mensagem = document.getElementById("mensagem");
+        const corpo = document.getElementById("corpo");
+
+        async function extrairErro(resposta) {
+            const corpoErro = await resposta.json().catch(() => ({}));
+            return (corpoErro.erros ?? [corpoErro.erro ?? "Falha ao processar a requisição."]).join(" ");
+        }
+
+        function celula(texto) {
+            const td = document.createElement("td");
+            td.textContent = texto;
+            return td;
+        }
+
+        function botao(texto, aoClicar) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.textContent = texto;
+            b.addEventListener("click", aoClicar);
+            return b;
+        }
+
+        function limparFormulario() {
+            form.reset();
+            campos.id.value = "";
+            titulo.textContent = "Novo produto";
+            cancelar.hidden = true;
+        }
+
+        function editar(produto) {
+            campos.id.value = produto.id;
+            campos.nome.value = produto.nome;
+            campos.descricao.value = produto.descricao;
+            campos.preco.value = produto.preco;
+            campos.quantidade.value = produto.quantidade;
+            titulo.textContent = "Editar produto " + produto.id;
+            cancelar.hidden = false;
+            campos.nome.focus();
+        }
+
+        async function excluir(produto) {
+            if (!confirm("Excluir o produto \"" + produto.nome + "\"?")) return;
+            const resposta = await fetch(url + "/" + produto.id, { method: "DELETE" });
+            if (!resposta.ok) {
+                mensagem.textContent = await extrairErro(resposta);
+                return;
+            }
+            mensagem.textContent = "Produto excluído.";
+            if (campos.id.value === String(produto.id)) limparFormulario();
+            await carregar();
+        }
+
+        async function consultarValor(produto) {
+            const resposta = await fetch(url + "/" + produto.id + "/valor-estoque");
+            if (!resposta.ok) {
+                mensagem.textContent = await extrairErro(resposta);
+                return;
+            }
+            const dados = await resposta.json();
+            mensagem.textContent = "Valor em estoque de " + produto.nome + ": " + dados.valorFormatado;
+        }
+
+        async function carregar() {
+            const resposta = await fetch(url);
+            if (!resposta.ok) {
+                mensagem.textContent = await extrairErro(resposta);
+                return;
+            }
+            const produtos = await resposta.json();
+            corpo.replaceChildren();
+            for (const produto of produtos) {
+                const linha = document.createElement("tr");
+                linha.append(
+                    celula(produto.id),
+                    celula(produto.nome),
+                    celula(produto.descricao),
+                    celula(moeda.format(produto.preco)),
+                    celula(produto.quantidade)
+                );
+                const acoes = document.createElement("td");
+                acoes.append(
+                    botao("Editar", () => editar(produto)),
+                    botao("Excluir", () => excluir(produto)),
+                    botao("Valor em estoque", () => consultarValor(produto))
+                );
+                linha.append(acoes);
+                corpo.append(linha);
+            }
+        }
+
+        form.addEventListener("submit", async evento => {
+            evento.preventDefault();
+            const editando = campos.id.value !== "";
+            const resposta = await fetch(editando ? url + "/" + campos.id.value : url, {
+                method: editando ? "PUT" : "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    nome: campos.nome.value,
+                    descricao: campos.descricao.value,
+                    preco: Number(campos.preco.value),
+                    quantidade: Number(campos.quantidade.value)
+                })
+            });
+            if (!resposta.ok) {
+                mensagem.textContent = await extrairErro(resposta);
+                return;
+            }
+            mensagem.textContent = editando ? "Produto atualizado." : "Produto cadastrado.";
+            limparFormulario();
+            await carregar();
+        });
+
+        cancelar.addEventListener("click", () => {
+            limparFormulario();
+            mensagem.textContent = "";
+        });
+
+        carregar().catch(() => { mensagem.textContent = "Não foi possível carregar os produtos."; });
+    </script>
+</body>
+</html>
